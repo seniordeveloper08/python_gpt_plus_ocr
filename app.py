@@ -66,7 +66,8 @@ company_collections = {
     "Invoice List": "ap_document_processes",
     "QUOTE": "ap_quotes",
     "OTHER": "ap_otherdocuments",
-    "VENDOR": "invoice_vendors"
+    "VENDOR": "invoice_vendors",
+    "API_COUNT": "api_count"
 }
 
 # PATH /
@@ -228,6 +229,10 @@ def process_invoice():
 
     for id in pdf_urls:
         X = list_col.find_one({"_id" : ObjectId(id)})
+
+        if(X == None):
+            continue
+        
         parse_result = parse_file_path(X["pdf_url"])
         count +=1
         filename = parse_result["path"]
@@ -279,7 +284,7 @@ def process_invoice():
 
         inserted_info.append(inserted_obj)
     # print(inserted_info)
-    count_col = admin_db[admin_collections["API_COUNT"]]
+    count_col = mydb[company_collections["API_COUNT"]]
     x = count_col.find_one({"companycode": company_code})
     if x == None:
         count_col.insert_one({"companycode": company_code, "company": Y["_id"], "count": count})
@@ -292,4 +297,4 @@ def process_invoice():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", debug=True)
