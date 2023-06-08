@@ -16,6 +16,7 @@ from schema import schema_generator, find_relationship
 from dotenv import load_dotenv
 import pymongo
 from bson.objectid import ObjectId
+from sshtunnel import SSHTunnelForwarder
 
 app = Flask(__name__)
 cors = CORS(app)
@@ -32,8 +33,26 @@ WASABI_SECRET_KEY = os.getenv('WASABI_SECRET_KEY')
 OPEN_AI_KEY = os.getenv('OPEN_AI_KEY')
 DB_URL = os.getenv("DB_URL")
 
-myclient = pymongo.MongoClient(DB_URL)
-admin_db = myclient["rovuk_admin"]
+# myclient = pymongo.MongoClient(DB_URL)
+# admin_db = myclient["rovuk_admin"]
+
+MONGO_HOST = os.getenv('MONGO_HOST')
+MONGO_DB = os.getenv('MONGO_DB')
+MONGO_USER = os.getenv('MONGO_USER')
+MONGO_PASS = os.getenv('MONGO_PASS')
+
+server = SSHTunnelForwarder(
+    MONGO_HOST,
+    ssh_username=MONGO_USER,
+    ssh_password=MONGO_PASS,
+    remote_bind_address=('127.0.0.1', 27017)
+)
+
+server.start()
+
+myclient = pymongo.MongoClient('127.0.0.1', server.local_bind_port) # server.local_bind_port is assigned local port
+admin_db = myclient[MONGO_DB]
+
 admin_collections = {
     "COMPANY": "tenants",
     "API_COUNT": "api_count"
