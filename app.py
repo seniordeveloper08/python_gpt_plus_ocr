@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 import pymongo
 from bson.objectid import ObjectId
 from sshtunnel import SSHTunnelForwarder
+from datetime import datetime
 
 app = Flask(__name__)
 cors = CORS(app)
@@ -59,11 +60,11 @@ admin_collections = {
 }
 
 company_collections = {
-    "Invoice": "ap_invoices", 
-    "Purchase Order": "ap_pos", 
-    "Packing Slip": "ap_packagingslips", 
-    "Receiving Slip": "ap_receivingslips",
-    "Invoice List": "ap_document_processes",
+    "INVOICE": "ap_invoices", 
+    "PURCHASE_ORDER": "ap_pos", 
+    "PACKING_SLIP": "ap_packagingslips", 
+    "RECEIVING_SLIP": "ap_receivingslips",
+    "INVOICE_LIST": "ap_document_processes",
     "QUOTE": "ap_quotes",
     "OTHER": "ap_otherdocuments",
     "VENDOR": "invoice_vendors",
@@ -82,39 +83,39 @@ def home():
 
 def get_fields(mydb, doc_type, filepath):
     query_list_total = {"OTHER": {
-        "invoice_no": "invoice number if there is no correct value return NONE",
-        "po_no": "PO number if there is no correct value return NONE",
-        "invoice_date_epoch": "Convert date into YYYY-MM-DD format without any string",
-        "vendor": "vendor name if there is no correct value return NONE"
+        "invoice_no": "Answer only invoice number",
+        "po_no": "Answer only PO number",
+        "invoice_date_epoch": "Answer only date into YYYY-MM-DD format or NONE",
+        "vendor": "Answer only vendor name"
     }, "QUOTE": {
-        "date_epoch": "Convert due date into YYYY-MM-DD format without any string",
-        "quote_number": "quote number if there is no correct value return NONE",
-        "terms": "If there is value for terms, print it or if not, print NONE",
-        "address": "address if there is no correct value return NONE",
-        "shipping_method": "ship method",
-        "sub_total": "subtotal without $ symbol if there is no correct value return NONE",
-        "tax": "tax without $ symbol if there is no correct value return NONE",
-        "quote_total": "total without $ symbol if there is no correct value return NONE",
-        "receiver_phone": "phone number if there is no correct value return NONE",
-        "vendor": "vendor name if there is no correct value return NONE"
+        "date_epoch": "Answer only due date into YYYY-MM-DD format",
+        "quote_number": "Answer only quote number",
+        "terms": "Answer only terms",
+        "address": "Answer only address",
+        "shipping_method": "Answer only ship method",
+        "sub_total": "Answer only subtotal without $ symbol or 0",
+        "tax": "Answer only tax without $ symbol or 0",
+        "quote_total": "Answer quote total without $ symbol or 0",
+        "receiver_phone": "Answer phone number",
+        "vendor": "Answer vendor name"
     }, "Invoice": {
-        "customer_id": "customer id if there is no correct value return NONE",
-        "invoice_no": "invoice number if there is no correct value return NONE",
-        "po_no": "PO number if there is no correct value return NONE",
-        "invoice_date_epoch": "Convert date into YYYY-MM-DD format without any string",
-        "due_date_epoch": "Convert due date into YYYY-MM-DD format without any string",
-        "order_date_epoch": "Convert order date into YYYY-MM-DD format without any string",
-        "ship_date_epoch": "Convert ship date into YYYY-MM-DD format without any string",
-        "terms": "If there is value for terms, print it or if not, print NONE",
-        "invoice_total_amount": "total without $ symbol if there is no correct value return NONE",
-        "tax_amount": "tax without $ symbol if there is no correct value return NONE",
-        "tax_id": "If there is value for tax id, print it or if not, print NONE",
-        "sub_total": "subtotal without $ symbol if there is no correct value return NONE",
-        "amount_due": "due amount without $ symbol if there is no correct value return NONE",
-        "receiving_date_epoch": "Convert receiving date into YYYY-MM-DD format without any string",
-        "delivery_address": "delivery address if there is no correct value return NONE",
-        "contract_number": "phone number if there is no correct value return NONE",
-        "vendor": "vendor name if there is no correct value return NONE",
+        "customer_id": "Answer only customer id",
+        "invoice_no": "Answer only invoice number",
+        "po_no": "Answer only PO number",
+        "invoice_date_epoch": "Answer only date into YYYY-MM-DD format",
+        "due_date_epoch": "Answer only due date into YYYY-MM-DD format",
+        "order_date_epoch": "Answer only order date into YYYY-MM-DD format",
+        "ship_date_epoch": "Answer only ship date into YYYY-MM-DD format",
+        "terms": "Answer only terms",
+        "invoice_total_amount": "Answer only total without $ symbol or 0",
+        "tax_amount": "Answer only tax without $ symbol or 0",
+        "tax_id": "Answer only tax id",
+        "sub_total": "Answer only subtotal without $ symbol or 0",
+        "amount_due": "Answer only due amount without $ symbol or 0",
+        "receiving_date_epoch": "Answer only receiving date into YYYY-MM-DD",
+        "delivery_address": "Answer only delivery address",
+        "contract_number": "Answer only phone number",
+        "vendor": "Answer only vendor name",
         # "TO": "Bill, to:",
         # "SHIP-TO": "ship to:",
         # "VENDOR-NAME": "vendor name if there is no correct value return NONE",
@@ -122,40 +123,39 @@ def get_fields(mydb, doc_type, filepath):
         # "PHONE-NUMBER": "phone number if there is no correct value return NONE"
     }, "Purchase Order": {
         # "INVOICE-NUMBER": "invoice number if there is no correct value return NONE",
-        "date_epoch": "Convert date into YYYY-MM-DD format without any string",
-        "po_no": "PO number if there is no correct value return NONE",
-        "customer_id": "customer id if there is no correct value return NONE",
-        "terms": "terms if there is no correct value return NONE",
-        "delivery_date_epoch": "Convert delivery date into YYYY-MM-DD format without any string",
-        "delivery_address": "delivery address if there is no correct value return NONE",
-        "contract_number": "phone number if there is no correct value return NONE",
-        "quote_number": "quote number if there is no correct value return NONE",
+        "date_epoch": "Answer only due date into YYYY-MM-DD format",
+        "po_no": "Answer only PO number",
+        "customer_id": "Answer only customer id",
+        "terms": "Answer only terms",
+        "delivery_date_epoch": "Answer only delivery date into YYYY-MM-DD format",
+        "delivery_address": "Answer only delivery address",
+        "contract_number": "Answer only phone number",
+        "quote_number": "Answer only quote number",
         # "TO": "Bill to:",
         # "SHIP-TO": "ship to:",
-        "sub_total": "subtotal without $ symbol if there is no correct value return NONE",
-        "tax": "tax without $ symbol if there is no correct value return NONE",
-        "po_total": "total without $ symbol if there is no correct value return NONE",
-        "vendor": "vendor name if there is no correct value return NONE",
+        "sub_total": "Answer only subtotal without $ symbol or 0",
+        "tax": "Answer only tax without $ symbol or 0",
+        "po_total": "Answer only total without $ symbol or 0",
+        "vendor": "Answer only vendor name",
         # "VENDOR-ADDRESS": "vendor address if there is no correct value return NONE",
         # "PHONE-NUMBER": "phone number if there is no correct value return NONE"
     }, "Packing Slip": {
-        "date_epoch": "Convert date into YYYY-MM-DD format without any string",
-        "invoice_no": "invoice number if there is no correct value return NONE",
-        "ship_to_address": "ship to address",
-        "vendor": "vendor name if there is no correct value return NONE",
+        "date_epoch": "Answer only date into YYYY-MM-DD format",
+        "invoice_no": "Answer only invoice number",
+        "ship_to_address": "Answer only ship to address",
+        "vendor": "Answer only vendor name",
         # "VENDOR-ADDRESS" : "vendor address if there is no correct value return NONE",
         # "po_number" : "PO number if there is no correct value return NONE",
         # "RECEIVER-NAME" : "RECEIVER NAME if there is no correct value return NONE",
 
     }, "Receiving Slip": {
-        "date_epoch": "Convert date into YYYY-MM-DD format",
-        "invoice_no": "number",
-        "ship_to_address": "ship to address",
-        "vendor": "vendor name if there is no correct value return NONE",
+        "date_epoch": "Answer only  date into YYYY-MM-DD format",
+        "invoice_no": "Answer only invoice number",
+        "ship_to_address": "Answer only ship to address",
+        "vendor": "Answer only vendor name",
         # "VENDOR-ADDRESS" : "vendor address without vendor name",
-        "po_no": "number",
-        "received_by": "RECEIVER NAME if there is no correct value return NONE",
-
+        "po_no": "Answer only po number",
+        "received_by": "Answer only receiver name",
     }}
 
     result = {"document_type": doc_type}
@@ -191,6 +191,9 @@ def get_fields(mydb, doc_type, filepath):
         result[item] = str(chain.run(input_documents=docs, question=query))
         result[item] = remove_first_space(result[item])
 
+        if(result[item].find("I don't know") >= 0 ):
+            result[item] = ""
+
         if(item.find("number") >= 0):
             result[item] = result[item].replace("-", "")
         
@@ -212,8 +215,15 @@ def get_fields(mydb, doc_type, filepath):
 @app.route("/process_invoice", methods=["POST"])
 @cross_origin()
 def process_invoice():
+    count = {
+        "PURCHASE_ORDER" : 0,
+        "PACKING_SLIP" : 0,
+        "RECEIVING_SLIP" : 0,
+        "QUOTE" : 0,
+        "INVOICE" : 0,
+        "OTHER" : 0
+    }
     req_data = request.get_json()
-    count = 0
     pdf_urls = req_data["pdf_urls"]
     company_code = req_data["company"]
 
@@ -224,7 +234,7 @@ def process_invoice():
     
     mydb = myclient[Y["DB_NAME"]]
 
-    list_col = mydb[company_collections["Invoice List"]]
+    list_col = mydb[company_collections["INVOICE_LIST"]]
     inserted_info = []
 
     for id in pdf_urls:
@@ -234,7 +244,6 @@ def process_invoice():
             continue
         
         parse_result = parse_file_path(X["pdf_url"])
-        count +=1
         filename = parse_result["path"]
         bucket = parse_result["bucket"]
         region = parse_result["region"]
@@ -249,6 +258,10 @@ def process_invoice():
         textract = create_textract(
             AWS_REGION, AWS_ACCESS_KEY, AWS_SECRET_KEY)
         response = analyze_invoice(textract, filebytes)
+
+        if (response == None):
+            continue
+
         type_doc = type_invoice(textract, filebytes)
 
         get_summary(response, filepath)
@@ -260,6 +273,8 @@ def process_invoice():
         result["items"] = table_items
         result["pdf_url"] = X["pdf_url"]
         result["document_id"] = id
+
+        count[result["document_type"]] +=1
 
         if os.path.exists("./CSV/index-{}.csv".format(filepath)):
             os.remove("./CSV/index-{}.csv".format(filepath))
@@ -285,16 +300,19 @@ def process_invoice():
         inserted_info.append(inserted_obj)
     # print(inserted_info)
     count_col = mydb[company_collections["API_COUNT"]]
-    x = count_col.find_one({"companycode": company_code})
+    x = count_col.find_one({"year": datetime.now().year, "month": datetime.now().month})
     if x == None:
-        count_col.insert_one({"companycode": company_code, "company": Y["_id"], "count": count})
+        count_obj = {"year": datetime.now().year, "month": datetime.now().month, "is_delete" : 0}
+        for item in count:
+            count_obj[item] = count[item]
+        count_col.insert_one(count_obj)
     else:
-        count = count + x["count"]
-        count_col.update_one({"companycode": company_code}, {"$set": {"count": count}})
+        count_obj = {}
+        for item in count:
+            count_obj[item] = count[item] + x[item]
+        count_col.update_one({"year": datetime.now().year, "month": datetime.now().month}, {"$set": count_obj})
     find_relationship(mydb, inserted_info)
     return "Success"
-
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True)

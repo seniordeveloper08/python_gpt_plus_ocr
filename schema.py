@@ -3,17 +3,20 @@ import pymongo
 myclient = pymongo.MongoClient("mongodb://localhost:27017/")
 
 collections = {
-    "Invoice": "ap_invoices", 
-    "Purchase Order": "ap_pos", 
-    "Packing Slip": "ap_packagingslips", 
-    "Receiving Slip": "ap_receivingslips",
+    "INVOICE": "ap_invoices", 
+    "PURCHASE_ORDER": "ap_pos", 
+    "PACKING_SLIP": "ap_packagingslips", 
+    "RECEIVING_SLIP": "ap_receivingslips",
+    "INVOICE_LIST": "ap_document_processes",
     "QUOTE": "ap_quotes",
-    "OTHER": "ap_otherdocuments"
+    "OTHER": "ap_otherdocuments",
+    "VENDOR": "invoice_vendors",
+    "API_COUNT": "api_count"
 }
 
 def schema_generator(mydb, schema_param):
     schemas = {
-        "Packing Slip" : {
+        "PACKING_SLIP" : {
             "invoice_id": "",
             "pdf_url": "", # Wasabi s3 bucket packaging slip document url
             "document_id": "", # Process document id
@@ -29,7 +32,7 @@ def schema_generator(mydb, schema_param):
             "created_at": 0,
             "updated_by": "",
             "updated_at": 0,
-        }, "Invoice" : {
+        }, "INVOICE" : {
             "assign_to": "", #user collection ID - All By default empty like rillion
             "vendor": "", # vendor collection ID
             # "vendor_name": "", # Vendor collection
@@ -71,7 +74,7 @@ def schema_generator(mydb, schema_param):
             "updated_by": "",  # User collection ID
             "updated_at": 0, # Epoch Data - When action taken
             "is_delete": 0, # 0 - for not archive, 1 - for archive   
-        }, "Purchase Order" : {
+        }, "PURCHASE_ORDER" : {
             "invoice_id": "",
             "pdf_url": "", # Wasabi s3 bucket po document url
             "document_id": "", # Process document id
@@ -97,7 +100,7 @@ def schema_generator(mydb, schema_param):
             "created_at": 0,
             "updated_by": "",
             "updated_at": 0
-        }, "Receiving Slip" : {
+        }, "RECEIVING_SLIP" : {
             "invoice_id": "",
             "pdf_url": "", # Wasabi s3 bucket receiving slip document url
             "document_id": "", # Process document id
@@ -114,7 +117,7 @@ def schema_generator(mydb, schema_param):
             "created_at": 0,
             "updated_by": "",
             "updated_at": 0,            
-        }, "Notes" : {
+        }, "NOTES" : {
             "notes": "",
             "created_at": 0,
             "created_by": "",
@@ -174,22 +177,22 @@ def schema_generator(mydb, schema_param):
 
 def find_relationship(mydb, params):
     for item in params:
-        if(item["document_type"] == "Packing Slip"):
-            x = mydb[collections["Invoice"]].find_one({"invoice_no" : item["invoice_no"], "vendor" : item["vendor"]})
+        if(item["document_type"] == "PACKING_SLIP"):
+            x = mydb[collections["INVOICE"]].find_one({"invoice_no" : item["invoice_no"], "vendor" : item["vendor"]})
             if(x != None):
-                mydb[collections["Packing Slip"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "po_no": x["po_no"]}})
+                mydb[collections["PACKING_SLIP"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "po_no": x["po_no"]}})
 
-        if(item["document_type"] == "Receiving Slip"):
-            x = mydb[collections["Invoice"]].find_one({"invoice_no" : item["invoice_no"], "vendor" : item["vendor"]})
+        if(item["document_type"] == "RECEIVING_SLIP"):
+            x = mydb[collections["INVOICE"]].find_one({"invoice_no" : item["invoice_no"], "vendor" : item["vendor"]})
             if(x != None):
-                mydb[collections["Receiving Slip"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "po_no": x["po_no"]}})
+                mydb[collections["RECEIVING_SLIP"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "po_no": x["po_no"]}})
 
         if(item["document_type"] == "OTHER"):
-            x = mydb[collections["Invoice"]].find_one({"invoice_no" : item["invoice_no"], "vendor" : item["vendor"]})
+            x = mydb[collections["INVOICE"]].find_one({"invoice_no" : item["invoice_no"], "vendor" : item["vendor"]})
             if(x != None):
                 mydb[collections["OTHER"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "po_no": x["po_no"]}})
         
-        if(item["document_type"] == "Purchase Order"):
-            x = mydb[collections["Invoice"]].find_one({"po_no" : item["po_no"], "vendor" : item["vendor"]})
+        if(item["document_type"] == "PURCHASE_ORDER"):
+            x = mydb[collections["INVOICE"]].find_one({"po_no" : item["po_no"], "vendor" : item["vendor"]})
             if(x != None):
-                mydb[collections["Purchase Order"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"]}})   
+                mydb[collections["PURCHASE_ORDER"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"]}})   

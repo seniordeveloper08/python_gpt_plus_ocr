@@ -60,19 +60,19 @@ def type_invoice(textract, file):
     toLower = json.dumps(response).lower()
     index = toLower.find('"text": "purchase order"')
     if index > 0:
-        return "Purchase Order"
+        return "PURCHASE_ORDER"
 
     index = toLower.find('"text": "packing slip"')
     if index > 0:
-        return "Packing Slip"
+        return "PACKING_SLIP"
 
     index = toLower.find('"text": "receiving slip"')
     if index > 0:
-        return "Receiving Slip"
+        return "RECEIVING_SLIP"
 
     index = toLower.find('"text": "invoice"')
     if index > 0:
-        return "Invoice"
+        return "INVOICE"
 
     index = toLower.find('"text": "quote"')
     if index > 0:
