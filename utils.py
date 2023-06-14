@@ -29,7 +29,7 @@ def convert_epoch(date):
         return 0
     else:
         date_obj = datetime.datetime.strptime(date.replace(" ", ""), '%Y-%m-%d')
-        return time.mktime(date_obj.timetuple())
+        return int(time.mktime(date_obj.timetuple()))
     
 def remove_first_space(str):
     arr = str.split(" ")

@@ -71,18 +71,9 @@ company_collections = {
     "API_COUNT": "api_count"
 }
 
-# PATH /
-# DESC TEST SERVER RUNNING
+list_to_convertINT = ["tax", "sub_total", "quote_total", "invoice_total_amount", "amount_due", "po_total", "tax_amount"]
 
-
-@app.route("/", methods=["GET"])
-@cross_origin()
-def home():
-    return "Hello World !"
-
-
-def get_fields(mydb, doc_type, filepath):
-    query_list_total = {"OTHER": {
+query_list_total = {"OTHER": {
         "invoice_no": "Answer only invoice number",
         "po_no": "Answer only PO number",
         "invoice_date_epoch": "Answer only date into YYYY-MM-DD format or NONE",
@@ -95,10 +86,11 @@ def get_fields(mydb, doc_type, filepath):
         "shipping_method": "Answer only ship method",
         "sub_total": "Answer only subtotal without $ symbol or 0",
         "tax": "Answer only tax without $ symbol or 0",
-        "quote_total": "Answer quote total without $ symbol or 0",
-        "receiver_phone": "Answer phone number",
-        "vendor": "Answer vendor name"
-    }, "Invoice": {
+        "quote_total": "Answer only quote total without $ symbol or 0",
+        "receiver_phone": "Answer only phone number",
+        "vendor": "Answer only vendor name",
+        "invoice_no": "Answer only invoice number",
+    }, "INVOICE": {
         "customer_id": "Answer only customer id",
         "invoice_no": "Answer only invoice number",
         "po_no": "Answer only PO number",
@@ -116,14 +108,9 @@ def get_fields(mydb, doc_type, filepath):
         "delivery_address": "Answer only delivery address",
         "contract_number": "Answer only phone number",
         "vendor": "Answer only vendor name",
-        # "TO": "Bill, to:",
-        # "SHIP-TO": "ship to:",
-        # "VENDOR-NAME": "vendor name if there is no correct value return NONE",
-        # "VENDOR-ADDRESS": "vendor address if there is no correct value return NONE",
-        # "PHONE-NUMBER": "phone number if there is no correct value return NONE"
-    }, "Purchase Order": {
-        # "INVOICE-NUMBER": "invoice number if there is no correct value return NONE",
+    }, "PURCHASE_ORDER": {
         "date_epoch": "Answer only due date into YYYY-MM-DD format",
+        "invoice_no": "Answer only invoice number",
         "po_no": "Answer only PO number",
         "customer_id": "Answer only customer id",
         "terms": "Answer only terms",
@@ -131,33 +118,36 @@ def get_fields(mydb, doc_type, filepath):
         "delivery_address": "Answer only delivery address",
         "contract_number": "Answer only phone number",
         "quote_number": "Answer only quote number",
-        # "TO": "Bill to:",
-        # "SHIP-TO": "ship to:",
         "sub_total": "Answer only subtotal without $ symbol or 0",
         "tax": "Answer only tax without $ symbol or 0",
         "po_total": "Answer only total without $ symbol or 0",
         "vendor": "Answer only vendor name",
-        # "VENDOR-ADDRESS": "vendor address if there is no correct value return NONE",
-        # "PHONE-NUMBER": "phone number if there is no correct value return NONE"
-    }, "Packing Slip": {
+    }, "PACKING_SLIP": {
         "date_epoch": "Answer only date into YYYY-MM-DD format",
         "invoice_no": "Answer only invoice number",
         "ship_to_address": "Answer only ship to address",
         "vendor": "Answer only vendor name",
-        # "VENDOR-ADDRESS" : "vendor address if there is no correct value return NONE",
-        # "po_number" : "PO number if there is no correct value return NONE",
-        # "RECEIVER-NAME" : "RECEIVER NAME if there is no correct value return NONE",
-
-    }, "Receiving Slip": {
+    }, "RECEIVING_SLIP": {
         "date_epoch": "Answer only  date into YYYY-MM-DD format",
         "invoice_no": "Answer only invoice number",
         "ship_to_address": "Answer only ship to address",
         "vendor": "Answer only vendor name",
-        # "VENDOR-ADDRESS" : "vendor address without vendor name",
         "po_no": "Answer only po number",
         "received_by": "Answer only receiver name",
     }}
 
+# PATH /
+# DESC TEST SERVER RUNNING
+
+
+@app.route("/", methods=["GET"])
+@cross_origin()
+def home():
+    return "Hello World !"
+
+
+def get_fields(mydb, doc_type, filepath):
+    
     result = {"document_type": doc_type}
 
     query_list = query_list_total[doc_type]
@@ -197,7 +187,7 @@ def get_fields(mydb, doc_type, filepath):
         if(item.find("number") >= 0):
             result[item] = result[item].replace("-", "")
         
-        if(item == "invoice_no" or item == "po_no" or item == "po_number" or item == "invoice_number"):
+        if(item == "invoice_no" or item == "po_no"):
             result[item] = result[item].replace(" ", "")
 
         if(item == "vendor"):
@@ -209,6 +199,17 @@ def get_fields(mydb, doc_type, filepath):
 
         if(item.find("epoch") >= 0):
             result[item] = convert_epoch(result[item])
+        try:
+            list_to_convertINT.index(item)
+        except:
+            result[item] = result[item]
+        else:
+            try: 
+                float(result[item]) 
+            except:
+                result[item] = result[item] 
+            else:
+                result[item] = float(result[item])  
     return result
 
 
@@ -221,25 +222,25 @@ def process_invoice():
         "RECEIVING_SLIP" : 0,
         "QUOTE" : 0,
         "INVOICE" : 0,
-        "OTHER" : 0
+        "OTHER" : 0,
+        "DUPLICATED" : 0
     }
     req_data = request.get_json()
     pdf_urls = req_data["pdf_urls"]
     company_code = req_data["company"]
-
-    admin_col = admin_db[admin_collections["COMPANY"]]
+    admin_col = admin_db[admin_collections["COMPANY"]]    
     Y = admin_col.find_one({"companycode": company_code})
+
     if Y == None:
+        list_col.update_one({"_id" : ObjectId(id)}, {"$set" :{"status": "PROCESS_ERROR"}})
         return "Fail"
     
     mydb = myclient[Y["DB_NAME"]]
-
     list_col = mydb[company_collections["INVOICE_LIST"]]
     inserted_info = []
 
     for id in pdf_urls:
         X = list_col.find_one({"_id" : ObjectId(id)})
-
         if(X == None):
             continue
         
@@ -249,19 +250,20 @@ def process_invoice():
         region = parse_result["region"]
         endpoint = parse_result["endpoint"]
 
-        filepath = filename.replace("/", "-")
-
+        # filepath = filename.replace("/", "-")
+        filepath = id
         # Get Bytes Data From 'rovukdata'
         filebytes = get_object(WASABI_ACCESS_KEY, WASABI_SECRET_KEY, region,
                             endpoint, bucket, filename)
-
         textract = create_textract(
             AWS_REGION, AWS_ACCESS_KEY, AWS_SECRET_KEY)
-        response = analyze_invoice(textract, filebytes)
+        response = {}
 
-        if (response == None):
+        try:
+            response = analyze_invoice(textract, filebytes)
+        except:
+            list_col.update_one({"_id" : ObjectId(id)}, {"$set" :{"status": "PROCESS_ERROR"}})
             continue
-
         type_doc = type_invoice(textract, filebytes)
 
         get_summary(response, filepath)
@@ -296,8 +298,13 @@ def process_invoice():
             inserted_obj["po_no"] = -1
         inserted_obj["document_type"] = result["document_type"]
         inserted_obj["vendor"] = result["vendor"]
-
         inserted_info.append(inserted_obj)
+
+        dup_col = mydb[company_collections[result["document_type"]]]
+        dup = dup_col.find({"vendor": result["vendor"], "invoice_no": result["invoice_no"]})
+        if(len(list(dup)) >1):
+            print(dup)
+            count["DUPLICATED"] = count["DUPLICATED"] + 1
     # print(inserted_info)
     count_col = mydb[company_collections["API_COUNT"]]
     x = count_col.find_one({"year": datetime.now().year, "month": datetime.now().month})
@@ -310,8 +317,11 @@ def process_invoice():
         count_obj = {}
         for item in count:
             count_obj[item] = count[item] + x[item]
+
         count_col.update_one({"year": datetime.now().year, "month": datetime.now().month}, {"$set": count_obj})
+        
     find_relationship(mydb, inserted_info)
+    list_col.update_one({"_id" : ObjectId(id)}, {"$set" :{"status": "PROCESS_COMPLETE"}})
     return "Success"
 
 if __name__ == "__main__":

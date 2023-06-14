@@ -161,10 +161,9 @@ def get_table(response, filepath):
         table_field.append(temp_table_row)
 
     table_result = [] 
-
     for item in table_field:
         table_obj = {
-            col["Label"] : col["Value"]
+            col["Type"] : col["Value"]
             for col in item
         }
         table_result.append(table_obj)
