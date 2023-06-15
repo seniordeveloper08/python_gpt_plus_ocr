@@ -184,7 +184,7 @@ def get_fields(mydb, doc_type, filepath):
         if(result[item].find("I don't know") >= 0 ):
             result[item] = ""
 
-        if(item.find("number") >= 0):
+        if(item == "contract_number" or item == "receiver_phone"):
             result[item] = result[item].replace("-", "")
         
         if(item == "invoice_no" or item == "po_no"):
@@ -274,7 +274,7 @@ def process_invoice():
 
         result["items"] = table_items
         result["pdf_url"] = X["pdf_url"]
-        result["document_id"] = id
+        result["document_id"] = ObjectId(id)
 
         count[result["document_type"]] +=1
 

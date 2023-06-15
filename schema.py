@@ -1,4 +1,5 @@
 import pymongo
+from bson.objectid import ObjectId
 
 myclient = pymongo.MongoClient("mongodb://localhost:27017/")
 
@@ -26,8 +27,9 @@ def schema_generator(mydb, schema_param):
             "po_no": "",
             "ship_to_address": "",
             "vendor": "", # Vendor Collection - Vendor Id
+            
             "is_delete": 0,
-            "is_orphan": 0, # 0 - Orphan document, 1 - already relationship with invoice document
+            "is_orphan": True, # 0 - Orphan document, 1 - already relationship with invoice document
             "created_by": "",
             "created_at": 0,
             "updated_by": "",
@@ -69,6 +71,7 @@ def schema_generator(mydb, schema_param):
             "notes": "",
             "invoice_notes": [], # Notes Schema Array
             "document_type": "INVOICE", # Fixed Invoice document type
+            
             "created_by": "",  # User collection ID
             "created_at": 0, # Epoch Date - When action taken
             "updated_by": "",  # User collection ID
@@ -94,8 +97,9 @@ def schema_generator(mydb, schema_param):
             "tax": 0,
             "po_total": 0,
             "items": [],
+            
             "is_delete": 0,
-            "is_orphan": 0, # 0 - Orphan document, 1 - already relationship with invoice document
+            "is_orphan": True, # 0 - Orphan document, 1 - already relationship with invoice document
             "created_by": "",
             "created_at": 0,
             "updated_by": "",
@@ -111,8 +115,9 @@ def schema_generator(mydb, schema_param):
             "ship_to_address": "",
             "vendor": "", # Vendor Collection - Vendor Id
             "received_by": "",
+            
             "is_delete": 0,
-            "is_orphan": 0, # 0 - Orphan document, 1 - already relationship with invoice document
+            "is_orphan": True, # 0 - Orphan document, 1 - already relationship with invoice document
             "created_by": "",
             "created_at": 0,
             "updated_by": "",
@@ -132,8 +137,9 @@ def schema_generator(mydb, schema_param):
             "invoice_no": "",
             "po_no": "",
             "vendor": "", # Vendor Collection - Vendor Id
+            
             "is_delete": 0,
-            "is_orphan": 0, # 0 - Orphan document, 1 - already relationship with invoice document
+            "is_orphan": True, # 0 - Orphan document, 1 - already relationship with invoice document
             "created_by": "",
             "created_at": 0,
             "updated_by": "",
@@ -180,19 +186,19 @@ def find_relationship(mydb, params):
         if(item["document_type"] == "PACKING_SLIP"):
             x = mydb[collections["INVOICE"]].find_one({"invoice_no" : item["invoice_no"], "vendor" : item["vendor"]})
             if(x != None):
-                mydb[collections["PACKING_SLIP"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "po_no": x["po_no"]}})
+                mydb[collections["PACKING_SLIP"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "po_no": x["po_no"], "is_orphan": False}})
 
         if(item["document_type"] == "RECEIVING_SLIP"):
             x = mydb[collections["INVOICE"]].find_one({"invoice_no" : item["invoice_no"], "vendor" : item["vendor"]})
             if(x != None):
-                mydb[collections["RECEIVING_SLIP"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "po_no": x["po_no"]}})
+                mydb[collections["RECEIVING_SLIP"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "po_no": x["po_no"], "is_orphan": False}})
 
         if(item["document_type"] == "OTHER"):
             x = mydb[collections["INVOICE"]].find_one({"invoice_no" : item["invoice_no"], "vendor" : item["vendor"]})
             if(x != None):
-                mydb[collections["OTHER"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "po_no": x["po_no"]}})
+                mydb[collections["OTHER"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "po_no": x["po_no"], "is_orphan": False}})
         
         if(item["document_type"] == "PURCHASE_ORDER"):
             x = mydb[collections["INVOICE"]].find_one({"po_no" : item["po_no"], "vendor" : item["vendor"]})
             if(x != None):
-                mydb[collections["PURCHASE_ORDER"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"]}})   
+                mydb[collections["PURCHASE_ORDER"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "is_orphan": False}})   
