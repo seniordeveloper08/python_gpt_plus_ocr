@@ -11,14 +11,14 @@ from langchain.docstore.document import Document
 import json
 from textract import create_textract, analyze_invoice, get_summary, get_table, type_invoice, get_object
 from csv_embed import embeding
-from utils import parse_file_path, convert_epoch, remove_first_space
-from schema import schema_generator, find_relationship
+from utils import parse_file_path, convert_epoch, remove_first_space, get_current_epoch
+from schema import schema_generator, find_relationship, send_notification
 from dotenv import load_dotenv
 import pymongo
 from bson.objectid import ObjectId
 from sshtunnel import SSHTunnelForwarder
 from datetime import datetime
-
+import time
 app = Flask(__name__)
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
@@ -61,26 +61,45 @@ admin_collections = {
 
 company_collections = {
     "INVOICE": "ap_invoices", 
+    "CREDIT_MEMO": "ap_invoices", 
     "PURCHASE_ORDER": "ap_pos", 
-    "PACKING_SLIP": "ap_packagingslips", 
-    "RECEIVING_SLIP": "ap_receivingslips",
+    "PACKING_SLIP": "ap_packaging_slips", 
+    "RECEIVING_SLIP": "ap_receiving_slips",
     "INVOICE_LIST": "ap_document_processes",
     "QUOTE": "ap_quotes",
     "OTHER": "ap_otherdocuments",
     "VENDOR": "invoice_vendors",
-    "API_COUNT": "api_count"
+    "API_COUNT": "api_count",
+    "HISTORY": "ap_invoice_histories",
+    "TERMS": "invoice_terms",
+    "USER": "invoice_users",
+    "ALERT": ""
 }
 
 list_to_convertINT = ["tax", "sub_total", "quote_total", "invoice_total_amount", "amount_due", "po_total", "tax_amount"]
+
+message_text = {
+    "MANUAL": 'Invoice manual upload by {}',
+    "EMAIL": 'Invoice imported from email. Sender: {}',
+    "SUCCESS": 'SmartAccuPay processed Invoice Document successfully.',
+    "VENDOR": "SmartAccuPay processed Invoice document and detected Vendor {}",
+    "INVOICE_NO": 'SmartAccuPay processed Invoice document and detected Invoice no: {}',
+    "PO_NO": 'SmartAccuPay processed Invoice document and detected PO No: {}',
+    "FAIL": "SmartAccuPay processed Invoice Document failed.",
+    "NO_VENDOR": "SmartAccuPay processed failed to detected: Vendor Name",
+    "NO_INVOICE_NO": "SmartAccuPay processed failed to detected: Invoice No",
+    "NO_PO_NO": "SmartAccuPay processed failed to detected: PO No",
+    "NO_DUE": "SmartAccuPay processed failed to detected:Invoice Due Date"
+}
 
 query_list_total = {"OTHER": {
         "invoice_no": "Answer only invoice number",
         "po_no": "Answer only PO number",
         "invoice_date_epoch": "Answer only date into YYYY-MM-DD format or NONE",
-        "vendor": "Answer only vendor name"
+        "vendor": "answer only all vendor names"
     }, "QUOTE": {
         "date_epoch": "Answer only due date into YYYY-MM-DD format",
-        "quote_number": "Answer only quote number",
+        "quote_no": "answer only quote number without any string",
         "terms": "Answer only terms",
         "address": "Answer only address",
         "shipping_method": "Answer only ship method",
@@ -88,7 +107,7 @@ query_list_total = {"OTHER": {
         "tax": "Answer only tax without $ symbol or 0",
         "quote_total": "Answer only quote total without $ symbol or 0",
         "receiver_phone": "Answer only phone number",
-        "vendor": "Answer only vendor name",
+        "vendor": "answer only all vendor names",
         "invoice_no": "Answer only invoice number",
     }, "INVOICE": {
         "customer_id": "Answer only customer id",
@@ -103,11 +122,29 @@ query_list_total = {"OTHER": {
         "tax_amount": "Answer only tax without $ symbol or 0",
         "tax_id": "Answer only tax id",
         "sub_total": "Answer only subtotal without $ symbol or 0",
-        "amount_due": "Answer only due amount without $ symbol or 0",
+        "amount_due": "count due amount and Answer only the result without $ symbol or 0",
         "receiving_date_epoch": "Answer only receiving date into YYYY-MM-DD",
         "delivery_address": "Answer only delivery address",
-        "contract_number": "Answer only phone number",
-        "vendor": "Answer only vendor name",
+        "contact_no": "Answer only phone number",
+        "vendor": "answer only all vendor names",
+    }, "CREDIT_MEMO": {
+        "customer_id": "Answer only customer id",
+        "invoice_no": "Answer only invoice number",
+        "po_no": "Answer only PO number",
+        "invoice_date_epoch": "Answer only date into YYYY-MM-DD format",
+        "due_date_epoch": "Answer only due date into YYYY-MM-DD format",
+        "order_date_epoch": "Answer only order date into YYYY-MM-DD format",
+        "ship_date_epoch": "Answer only ship date into YYYY-MM-DD format",
+        "terms": "Answer only terms",
+        "invoice_total_amount": "Answer only negative value of total without $ symbol or 0",
+        "tax_amount": "Answer only tax without $ symbol or 0",
+        "tax_id": "Answer only tax id",
+        "sub_total": "Answer only negative value of subtotal without $ symbol or 0",
+        "amount_due": "count due amount and Answer only the negative value of the result without $ symbol or 0",
+        "receiving_date_epoch": "Answer only receiving date into YYYY-MM-DD",
+        "delivery_address": "Answer only delivery address",
+        "contact_no": "Answer only phone number",
+        "vendor": "answer only all vendor names",
     }, "PURCHASE_ORDER": {
         "date_epoch": "Answer only due date into YYYY-MM-DD format",
         "invoice_no": "Answer only invoice number",
@@ -116,24 +153,23 @@ query_list_total = {"OTHER": {
         "terms": "Answer only terms",
         "delivery_date_epoch": "Answer only delivery date into YYYY-MM-DD format",
         "delivery_address": "Answer only delivery address",
-        "contract_number": "Answer only phone number",
-        "quote_number": "Answer only quote number",
+        "contact_no": "Answer only phone number",
+        "quote_no": "answer only quote number without any string",
         "sub_total": "Answer only subtotal without $ symbol or 0",
         "tax": "Answer only tax without $ symbol or 0",
         "po_total": "Answer only total without $ symbol or 0",
-        "vendor": "Answer only vendor name",
+        "vendor": "answer only all vendor names sperated into ,",
     }, "PACKING_SLIP": {
         "date_epoch": "Answer only date into YYYY-MM-DD format",
         "invoice_no": "Answer only invoice number",
         "ship_to_address": "Answer only ship to address",
-        "vendor": "Answer only vendor name",
+        "vendor": "answer only all vendor names",
     }, "RECEIVING_SLIP": {
         "date_epoch": "Answer only  date into YYYY-MM-DD format",
         "invoice_no": "Answer only invoice number",
         "ship_to_address": "Answer only ship to address",
-        "vendor": "Answer only vendor name",
+        "vendor": "answer only all vendor names",
         "po_no": "Answer only po number",
-        "received_by": "Answer only receiver name",
     }}
 
 # PATH /
@@ -149,7 +185,6 @@ def home():
 def get_fields(mydb, doc_type, filepath):
     
     result = {"document_type": doc_type}
-
     query_list = query_list_total[doc_type]
 
     for item in query_list:
@@ -161,7 +196,6 @@ def get_fields(mydb, doc_type, filepath):
 
         with open('./JSON/vector-{}.json'.format(filepath), 'r') as infile:
             data = json.load(infile)
-        print(type(data))
         embeddings = OpenAIEmbeddings(
             openai_api_key=OPEN_AI_KEY)
 
@@ -173,7 +207,6 @@ def get_fields(mydb, doc_type, filepath):
         csv_text = loader.load()
 
         docs = []
-        print(query)
         for res in doclist:
             docs.append(Document(
                 page_content=csv_text[res].page_content, metadata=csv_text[res].metadata))
@@ -184,14 +217,29 @@ def get_fields(mydb, doc_type, filepath):
         if(result[item].find("I don't know") >= 0 ):
             result[item] = ""
 
-        if(item == "contract_number" or item == "receiver_phone"):
+        if(item == "contact_no" or item == "receiver_phone"):
             result[item] = result[item].replace("-", "")
+            result[item] = result[item].replace("(", "")
+            result[item] = result[item].replace(")", "")
+            result[item] = result[item].replace(" ", "")
         
         if(item == "invoice_no" or item == "po_no"):
             result[item] = result[item].replace(" ", "")
 
         if(item == "vendor"):
-            x = mydb[company_collections["VENDOR"]].find_one({"vendor_name": result[item]})
+            vendors = result[item].split(", ")
+            print(doc_type, vendors)
+            vendor_flag = False
+            for vendor in vendors:
+                x = mydb[company_collections["VENDOR"]].find_one({"vendor_name": vendor}, collation={ "locale": 'en_US', "strength": 1 })
+                if x != None:
+                    vendor_flag = True
+                    result[item] = x["_id"]
+            if(vendor_flag == False):
+                result[item] = ""
+
+        if(item == "terms"):
+            x = mydb[company_collections["TERMS"]].find_one({"name": result[item]})
             if x != None:
                 result[item] = x["_id"]
             else:
@@ -205,11 +253,11 @@ def get_fields(mydb, doc_type, filepath):
             result[item] = result[item]
         else:
             try: 
-                float(result[item]) 
+                float(result[item].replace(",", "").replace(" ", ""))
             except:
                 result[item] = result[item] 
             else:
-                result[item] = float(result[item])  
+                result[item] = float(result[item].replace(",", "").replace(" ", ""))
     return result
 
 
@@ -238,6 +286,7 @@ def process_invoice():
     mydb = myclient[Y["DB_NAME"]]
     list_col = mydb[company_collections["INVOICE_LIST"]]
     inserted_info = []
+    invoice_id = ""
 
     for id in pdf_urls:
         X = list_col.find_one({"_id" : ObjectId(id)})
@@ -275,8 +324,15 @@ def process_invoice():
         result["items"] = table_items
         result["pdf_url"] = X["pdf_url"]
         result["document_id"] = ObjectId(id)
+        result["created_at"] = get_current_epoch()
+        result["created_by"] = X["created_by"]
+        result["updated_at"] = get_current_epoch()
+        result["updated_by"] = X["created_by"]
 
-        count[result["document_type"]] +=1
+        if(result["document_type"] == "CREDIT_MEMO"):
+            count["INVOICE"] +=1
+        else:
+            count[result["document_type"]] +=1
 
         if os.path.exists("./CSV/index-{}.csv".format(filepath)):
             os.remove("./CSV/index-{}.csv".format(filepath))
@@ -296,16 +352,61 @@ def process_invoice():
             inserted_obj["po_no"] = result["po_no"]
         else:
             inserted_obj["po_no"] = -1
+
+        if "quote_no" in result:
+            inserted_obj["quote_no"] = result["quote_no"]
+        else:
+            inserted_obj["quote_no"] = -1
+
         inserted_obj["document_type"] = result["document_type"]
         inserted_obj["vendor"] = result["vendor"]
         inserted_info.append(inserted_obj)
 
+        if(result["document_type"] == "INVOICE"):
+            text = {}
+            invoice_id = inserted_id
+            result_msg = mydb[company_collections["USER"]].find_one({"_id": result["created_by"]})
+            text["MANUAL"] = message_text["MANUAL"].format(result_msg["username"])
+            text["SUCCESS"] = message_text["SUCCESS"]
+            
+            if(result["vendor"] == ""):
+                text["NO_VENDOR"] = message_text["NO_VENDOR"]
+            else:
+                result_msg = mydb[company_collections["VENDOR"]].find_one({"_id": result["vendor"]})
+                text["VENDOR"] = message_text["VENDOR"].format(result_msg["vendor_name"])
+            
+            if(result["invoice_no"] == ""):
+                text["NO_INVOICE_NO"] = message_text["NO_INVOICE_NO"]
+            else:
+                text["INVOICE_NO"] = message_text["INVOICE_NO"].format(result["invoice_no"])
+
+            if(result["po_no"] == ""):
+                text["NO_PO_NO"] = message_text["NO_PO_NO"]
+            else:
+                text["PO_NO"] = message_text["PO_NO"].format(result["po_no"])
+            
+            if(result["due_date_epoch"] == 0):
+                text["NO_DUE"] = message_text["NO_DUE"]
+
+            for message_item in text:
+                mydb[company_collections["HISTORY"]].insert_one({
+                    "data": [],
+                    "invoice_id": inserted_id,
+                    "history_created_at": get_current_epoch(),
+                    "history_created_by": "",
+                    "action": "AI Processing",
+                    "taken_device": "Web",
+                    "message": text[message_item],
+                    "is_system": True
+                })
+
         dup_col = mydb[company_collections[result["document_type"]]]
         dup = dup_col.find({"vendor": result["vendor"], "invoice_no": result["invoice_no"]})
+        list_col.update_one({"_id" : ObjectId(id)}, {"$set" :{"status": "PROCESS_COMPLETE"}})
+
         if(len(list(dup)) >1):
-            print(dup)
             count["DUPLICATED"] = count["DUPLICATED"] + 1
-    # print(inserted_info)
+        
     count_col = mydb[company_collections["API_COUNT"]]
     x = count_col.find_one({"year": datetime.now().year, "month": datetime.now().month})
     if x == None:
@@ -321,7 +422,9 @@ def process_invoice():
         count_col.update_one({"year": datetime.now().year, "month": datetime.now().month}, {"$set": count_obj})
         
     find_relationship(mydb, inserted_info)
-    list_col.update_one({"_id" : ObjectId(id)}, {"$set" :{"status": "PROCESS_COMPLETE"}})
+    send_notification(mydb, result["created_by"], invoice_id)
+    
+
     return "Success"
 
 if __name__ == "__main__":

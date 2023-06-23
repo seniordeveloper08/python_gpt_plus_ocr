@@ -1,6 +1,9 @@
 import datetime
 import time
 
+def get_current_epoch():
+    return int(time.mktime(datetime.datetime.now().timetuple()))
+
 def parse_file_path(fileURL):
     result = fileURL.split("/")
     sub_result = result[2].split(".")

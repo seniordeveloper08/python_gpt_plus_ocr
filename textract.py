@@ -69,6 +69,10 @@ def type_invoice(textract, file):
     index = toLower.find('"text": "receiving slip"')
     if index > 0:
         return "RECEIVING_SLIP"
+    
+    index = toLower.find('"text": "credit"')
+    if index > 0:
+        return "CREDIT_MEMO"
 
     index = toLower.find('"text": "invoice"')
     if index > 0:
@@ -162,10 +166,16 @@ def get_table(response, filepath):
 
     table_result = [] 
     for item in table_field:
-        table_obj = {
-            col["Type"] : col["Value"]
-            for col in item
-        }
+        table_obj = {}
+        for col in item:
+            value = col["Value"].replace("$", "").replace("\n", " ")
+            try:
+                float(value)
+            except:
+                table_obj[col["Type"]] = value
+            else:
+                table_obj[col["Type"]] = float(value)
+
         table_result.append(table_obj)
 
     return table_result
