@@ -190,25 +190,25 @@ def get_fields(mydb, doc_type, filepath):
     result = {"document_type": doc_type}
     query_list = query_list_total[doc_type]
 
+
+    llm = OpenAI(
+            temperature=0, openai_api_key=OPEN_AI_KEY)
+    chain = load_qa_chain(llm, chain_type="stuff")
+
+    with open('./JSON/vector-{}.json'.format(filepath), 'r') as infile:
+        data = json.load(infile)
+    embeddings = OpenAIEmbeddings(
+        openai_api_key=OPEN_AI_KEY)
+    loader = CSVLoader(
+            file_path='./CSV/index-{}.csv'.format(filepath), encoding="utf8")
+    csv_text = loader.load()
+    
     for item in query_list:
         query = query_list[item]
-
-        llm = OpenAI(
-            temperature=0, openai_api_key=OPEN_AI_KEY)
-        chain = load_qa_chain(llm, chain_type="stuff")
-
-        with open('./JSON/vector-{}.json'.format(filepath), 'r') as infile:
-            data = json.load(infile)
-        embeddings = OpenAIEmbeddings(
-            openai_api_key=OPEN_AI_KEY)
 
         query_result = embeddings.embed_query(query)
         query_results = np.array(query_result)
         doclist = utils.maximal_marginal_relevance(query_results, data)
-        loader = CSVLoader(
-            file_path='./CSV/index-{}.csv'.format(filepath), encoding="utf8")
-        csv_text = loader.load()
-
         docs = []
         for res in doclist:
             docs.append(Document(
@@ -277,10 +277,17 @@ def process_invoice():
         "DUPLICATED" : 0
     }
     req_data = request.get_json()
-    pdf_urls = req_data["pdf_urls"]
-    company_code = req_data["company"]
-    token = req_data["authorization"]
-    api_base_url = req_data["api_base_url"]
+
+    pdf_urls = []
+    company_code = token = api_base_url = ""
+
+    try:
+        pdf_urls = req_data["pdf_urls"]
+        company_code = req_data["company"]
+        token = req_data["authorization"]
+        api_base_url = req_data["api_base_url"]
+    except:
+        return "Fail"   
 
     admin_col = admin_db[admin_collections["COMPANY"]]    
     Y = admin_col.find_one({"companycode": company_code})
