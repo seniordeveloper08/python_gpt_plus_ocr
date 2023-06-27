@@ -59,6 +59,8 @@ admin_collections = {
     "API_COUNT": "api_count"
 }
 
+main_document_type = ["INVOICE", "PURCHASE_ORDER", "PACKING_SLIP", 'RECEIVING_SLIP', "QUOTE"]
+
 company_collections = {
     "INVOICE": "ap_invoices", 
     "CREDIT_MEMO": "ap_invoices", 
@@ -73,7 +75,8 @@ company_collections = {
     "HISTORY": "ap_invoice_histories",
     "TERMS": "invoice_terms",
     "USER": "invoice_users",
-    "ALERT": ""
+    "ALERT": "ap_alerts",
+    "DUPLICATED": "ap_duplicate_documents"
 }
 
 list_to_convertINT = ["tax", "sub_total", "quote_total", "invoice_total_amount", "amount_due", "po_total", "tax_amount"]
@@ -276,6 +279,9 @@ def process_invoice():
     req_data = request.get_json()
     pdf_urls = req_data["pdf_urls"]
     company_code = req_data["company"]
+    token = req_data["authorization"]
+    api_base_url = req_data["api_base_url"]
+
     admin_col = admin_db[admin_collections["COMPANY"]]    
     Y = admin_col.find_one({"companycode": company_code})
 
@@ -285,14 +291,17 @@ def process_invoice():
     
     mydb = myclient[Y["DB_NAME"]]
     list_col = mydb[company_collections["INVOICE_LIST"]]
+
     inserted_info = []
     invoice_id = ""
+    result = {}
 
     for id in pdf_urls:
+        result = {}
         X = list_col.find_one({"_id" : ObjectId(id)})
         if(X == None):
             continue
-        
+        pdf_url = X["pdf_url"]
         parse_result = parse_file_path(X["pdf_url"])
         filename = parse_result["path"]
         bucket = parse_result["bucket"]
@@ -341,26 +350,33 @@ def process_invoice():
             os.remove("./JSON/vector-{}.json".format(filepath))
 
         inserted_id = schema_generator(mydb,result)
-        inserted_obj = {"id": inserted_id}
+        if(result["document_type"] in main_document_type):
+            inserted_obj = {"id": str(inserted_id)}
+            inserted_obj["document_type"] = result["document_type"]
 
-        if "invoice_no" in result:
-            inserted_obj["invoice_no"] = result["invoice_no"]
-        else:
-            inserted_obj["invoice_no"] = -1
+            inserted_obj["vendor"] = str(result["vendor"])
+            if(result["vendor"] == ""):
+                inserted_obj["document_type"] = "UNKNOWN"
 
-        if "po_no" in result:
-            inserted_obj["po_no"] = result["po_no"]
-        else:
-            inserted_obj["po_no"] = -1
+            if(inserted_obj["document_type"] == "PURCHASE_ORDER" or inserted_obj["document_type"] == "QUOTE" or inserted_obj["document_type"] == "UNKNOWN"): 
+                if("quote_no" in result):
+                    inserted_obj["quote_no"] = result["quote_no"]
+                else:
+                    inserted_obj["quote_no"] = ""
 
-        if "quote_no" in result:
-            inserted_obj["quote_no"] = result["quote_no"]
-        else:
-            inserted_obj["quote_no"] = -1
+            if(inserted_obj["document_type"] == "INVOICE" or inserted_obj["document_type"] == "PURCHASE_ORDER"): 
+                if "po_no" in result:
+                    inserted_obj["po_no"] = result["po_no"]
+                else:
+                    inserted_obj["po_no"] = ""
 
-        inserted_obj["document_type"] = result["document_type"]
-        inserted_obj["vendor"] = result["vendor"]
-        inserted_info.append(inserted_obj)
+            if(inserted_obj["document_type"] == "PACKING_SLIP" or inserted_obj["document_type"] == "RECEIVING_SLIP"): 
+                if "invoice_no" in result:
+                    inserted_obj["invoice_no"] = result["invoice_no"]
+                else:
+                    inserted_obj["invoice_no"] = ""
+
+            inserted_info.append(inserted_obj)
 
         if(result["document_type"] == "INVOICE"):
             text = {}
@@ -405,6 +421,25 @@ def process_invoice():
         list_col.update_one({"_id" : ObjectId(id)}, {"$set" :{"status": "PROCESS_COMPLETE"}})
 
         if(len(list(dup)) >1):
+            duplicate_document = {
+                "pdf_url": pdf_url,
+                "invoice_no": result["invoice_no"],
+                "po_no": "",
+                "status": "Pending",
+                "vendor": result["vendor"],
+                "document_type": result["document_type"],
+                "created_by": result["created_by"],
+                "created_at": result["created_at"],
+                "updated_by": result["updated_by"],
+                "updated_at": result["updated_at"],
+                "is_delete": 0
+            }
+
+            if("po_no" in result):
+                duplicate_document["po_no"] = result["po_no"]
+
+            mydb[company_collections["DUPLICATED"]].insert_one(duplicate_document)
+
             count["DUPLICATED"] = count["DUPLICATED"] + 1
         
     count_col = mydb[company_collections["API_COUNT"]]
@@ -421,7 +456,7 @@ def process_invoice():
 
         count_col.update_one({"year": datetime.now().year, "month": datetime.now().month}, {"$set": count_obj})
         
-    find_relationship(mydb, inserted_info)
+    find_relationship(inserted_info, token, api_base_url)
     send_notification(mydb, result["created_by"], invoice_id)
     
 

@@ -2,6 +2,7 @@ import pymongo
 from bson.objectid import ObjectId
 from utils import get_current_epoch
 myclient = pymongo.MongoClient("mongodb://localhost:27017/")
+import requests
 
 collections = {
     "INVOICE": "ap_invoices", 
@@ -270,29 +271,11 @@ def schema_generator(mydb, schema_param):
         x = mycol.insert_one(schema_obj)
         return x.inserted_id
 
-def find_relationship(mydb, params):
-    for item in params:
-        if(item["document_type"] == "PACKING_SLIP"):
-            x = mydb[collections["INVOICE"]].find_one({"invoice_no" : item["invoice_no"], "vendor" : item["vendor"]})
-            if(x != None):
-                mydb[collections["PACKING_SLIP"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "po_no": x["po_no"], "is_orphan": False}})
+def find_relationship(inserted_info, token, api_base_url):
 
-        if(item["document_type"] == "RECEIVING_SLIP"):
-            x = mydb[collections["INVOICE"]].find_one({"invoice_no" : item["invoice_no"], "vendor" : item["vendor"]})
-            if(x != None):
-                mydb[collections["RECEIVING_SLIP"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "po_no": x["po_no"], "is_orphan": False}})
+    url = 'https://{}/webapi/v1/portal/makeapdocumentrelationship'.format(api_base_url)
+    body = inserted_info
 
-        if(item["document_type"] == "OTHER"):
-            x = mydb[collections["INVOICE"]].find_one({"invoice_no" : item["invoice_no"], "vendor" : item["vendor"]})
-            if(x != None):
-                mydb[collections["OTHER"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "po_no": x["po_no"], "is_orphan": False}})
-        
-        if(item["document_type"] == "QUOTE"):
-            x = mydb[collections["PURCHASE_ORDER"]].find_one({"quote_no" : item["quote_no"]})
-            if(x != None):
-                mydb[collections["QUOTE"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["invoice_id"], "po_no": x["po_no"], "is_orphan": False}})
+    headers = {'Authorization': token}
+    x = requests.post(url, json = body, headers=headers, verify=False)
 
-        if(item["document_type"] == "PURCHASE_ORDER"):
-            x = mydb[collections["INVOICE"]].find_one({"po_no" : item["po_no"], "vendor" : item["vendor"]})
-            if(x != None):
-                mydb[collections["PURCHASE_ORDER"]].update_one({"_id": item["id"]}, {"$set": {"invoice_id": x["_id"], "is_orphan": False}})   
